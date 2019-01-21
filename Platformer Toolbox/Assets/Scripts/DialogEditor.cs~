@@ -1,0 +1,395 @@
+﻿using UnityEngine;
+using UnityEditor;
+using System.Collections.Generic;
+using System.IO;
+using System.Xml;					//Needed for XML functionality
+using UnityEditor.IMGUI.Controls;
+
+public class DialogEditor : EditorWindow {
+
+	private static List <string> allXmlFileNames = new List <string> ();
+	private static SceneDialogs currentlyLoadedSceneDialogs;
+	private static string fileDirectory = "Resources/XML_Files/SceneDialogs";
+
+	private static string selectedSceneName;
+	private static int selectedSceneIndex = 0;
+	private static string createNewFileName = "";
+
+	private static Dialog selectedDialog;
+	private static Vector2 scrollPosition = Vector2.zero;
+	private static int dialogIDInput;
+	private static string dialogDescriptionInput;
+
+	private static Vector2 gridScrollPosition = Vector2.zero;
+	private static Texture2D gridBackground;
+	private static List<DialogGridNode> gridNodes = new List<DialogGridNode> ();
+
+	private static List<Rect> windows = new List<Rect>();
+	//private static List<int> windowsToAttach = new List<int>();
+	//private static List<int> attachedWindows = new List<int>();
+
+	private static DialogLine selectedDialogLine;
+
+	private int currentLine = 0;
+	private string speakerName;
+	private string lineText;
+	private string soundFilePath;
+	private string spriteName;
+
+
+	[MenuItem ("Window/DialogEditor")]
+	public static void Init () {
+		EditorWindow.GetWindow (typeof(DialogEditor));
+
+		ReloadData ();
+	}
+
+	//--- Data / Loading Functions ---------------------------------------------------------------------------------------------------
+	// Makes a list of all the currently existing XML files, and loads in the first file.
+	private static void ReloadData () {
+		LoadSceneXmlList ();
+		if (allXmlFileNames.Count != 0) {
+			LoadDialogData (allXmlFileNames [0]);
+			selectedSceneName = allXmlFileNames [0];
+		}
+	}
+
+	private static void LoadSceneXmlList () { 
+		allXmlFileNames.Clear ();
+		DirectoryInfo dir = new DirectoryInfo (Path.Combine ("Assets", fileDirectory));
+		FileInfo[] info = dir.GetFiles ("*.xml");
+		foreach (FileInfo f in info) {
+			allXmlFileNames.Add (f.Name);
+		}
+	}
+
+	private static void LoadDialogData (string fileName) {
+		string xmlPath = Path.Combine (fileDirectory, fileName);
+
+		if (Path.GetExtension (xmlPath) == string.Empty) {
+			xmlPath += ".xml";
+		} else if (Path.GetExtension (xmlPath) != ".xml") {
+			Path.ChangeExtension (xmlPath, ".xml");
+		}
+
+		if (File.Exists (Path.Combine (Application.dataPath, xmlPath))) {
+			Debug.Log ("Loading: " + xmlPath);
+			currentlyLoadedSceneDialogs = XML_Loader.Deserialize <SceneDialogs> ((Path.Combine (Application.dataPath, xmlPath)));
+			if (currentlyLoadedSceneDialogs.allDialogsInScene [0] != null) {
+				selectedDialog = currentlyLoadedSceneDialogs.allDialogsInScene [0];
+				if (selectedDialog.DialogLines.Count != 0) {
+					selectedDialogLine = selectedDialog.DialogLines [0];
+				}
+			}
+		} else {
+			Debug.LogError ("XML File: " + (Path.Combine (Application.dataPath, xmlPath)) + " is not found.");
+		}
+	}
+
+	//--- XML-File Functions ---------------------------------------------------------------------------------------------------
+	private static void DeleteCurrentXMLFile () {
+		string path = Path.Combine (Application.dataPath, Path.Combine (fileDirectory, allXmlFileNames [selectedSceneIndex]));
+		Debug.Log (path);
+		File.Delete (path);
+		File.Delete (path + ".meta");
+
+		ReloadData ();
+	}
+
+	private static void CreateNewXMLFile (string name) {
+		string path = Path.Combine (Application.dataPath, Path.Combine (fileDirectory, name));
+		if (Path.GetExtension (path) == string.Empty) {
+			path += ".xml";
+		} else if (Path.GetExtension (path) != ".xml") {
+			Path.ChangeExtension (path, ".xml");
+		}
+
+		XmlDocument doc = new XmlDocument();
+		XmlNode rootNode = doc.CreateElement ("SceneDialogs");
+		doc.AppendChild (rootNode);
+
+		XmlNode dialogNode = doc.CreateElement ("Dialog");
+		XmlAttribute IDattribute = doc.CreateAttribute ("ID");
+		IDattribute.Value = "0";
+		dialogNode.Attributes.Append (IDattribute);
+		XmlAttribute bigSprites = doc.CreateAttribute ("BigSprites");
+		bigSprites.Value = "true";
+		dialogNode.Attributes.Append (bigSprites);
+		rootNode.AppendChild (dialogNode);
+
+		XmlNode description = doc.CreateElement ("Description");
+		description.InnerText = "DialogDescription";
+		dialogNode.AppendChild (description);
+
+		doc.Save (path);
+
+		ReloadData ();
+	}
+
+	//--- Dialog Functions ---------------------------------------------------------------------------------------------------
+	private static void CreateNewDialog () {
+		Dialog newDialog = new Dialog ();
+		newDialog.ID = currentlyLoadedSceneDialogs.allDialogsInScene.Count;
+		newDialog.BigSprites = false;
+		newDialog.dialogDescription = "New Dialog";
+		currentlyLoadedSceneDialogs.allDialogsInScene.Add (newDialog);
+
+		// ZORG DAT DE NIEUWE DIALOG ID NIET EEN ANDER KAN OVERWRITEN
+	}
+
+	private static void RemoveSelectedDialog () {
+		foreach (Dialog dialog in currentlyLoadedSceneDialogs.allDialogsInScene) {
+			if (dialog.ID == selectedDialog.ID) {
+				currentlyLoadedSceneDialogs.allDialogsInScene.Remove (dialog);
+				break;
+			}
+		}
+	}
+
+	private static void SelectDialogByID (int id) {
+		foreach (Dialog d in currentlyLoadedSceneDialogs.allDialogsInScene) {
+			if (d.ID == id)
+				selectedDialog = d;
+			gridNodes.Clear ();
+		}
+	}
+
+	private static void AdjustDialogSettings () {
+		Debug.Log ("Input: " + dialogIDInput + ". Selected ID: " + selectedDialog.ID);
+		if (dialogIDInput != selectedDialog.ID) {
+			bool IDAlreadyExists = false;
+			foreach (Dialog d in currentlyLoadedSceneDialogs.allDialogsInScene) {
+				if (d.ID == dialogIDInput) {
+					IDAlreadyExists = true;
+				}
+			}
+			Debug.Log (IDAlreadyExists);
+			if (IDAlreadyExists) {
+				// GEEF POPUP MET 'ID ALREADY EXISTS'.
+				return;
+			}
+		}
+		selectedDialog.ID = dialogIDInput;
+		selectedDialog.dialogDescription = dialogDescriptionInput;
+	}
+
+	//--- Grid/Map Functions ---------------------------------------------------------------------------------------------------
+	private static void SetBackgroundTexture () {
+		gridBackground = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+		gridBackground.SetPixel(0, 0, new Color(0.2f,0.2f,0.2f, 1f));
+		gridBackground.Apply();
+	}
+
+	void DrawNodeWindow (int id) {
+		DialogLine dL = gridNodes [id].dialogLine;
+
+		Color c = GUI.backgroundColor;
+		if (dL.followUpLine == -1) {
+			GUI.backgroundColor = Color.red;
+		}
+		GUILayout.Label ("Line ID: " + dL.lineID, EditorStyles.boldLabel);
+		GUILayout.Label (dL.text, EditorStyles.label);
+		GUILayout.Label ("#responses: " + dL.responses.Count, EditorStyles.label);
+
+		GUI.backgroundColor = c;
+
+		GUI.DragWindow ();
+	}
+
+	void DrawNodeCurve (Rect start, Rect end) {
+		Vector3 startPos = new Vector3 (start.x + start.width, start.y + start.height / 2, 0);
+		Vector3 endPos = new Vector3 (end.x, end.y + end.height / 2, 0);
+		Vector3 startTan = startPos + Vector3.right * 50;
+		Vector3 endTan = endPos + Vector3.left * 50;
+		Color shadowCol = new Color (0, 0, 0, 0.06f);
+
+		for (int i = 0; i < 3; i++) {// Draw a shadow
+			Handles.DrawBezier (startPos, endPos, startTan, endTan, shadowCol, null, (i + 1) * 5);
+		}
+
+		Handles.DrawBezier (startPos, endPos, startTan, endTan, Color.black, null, 1);
+	}
+
+
+	private void OnGUI () {
+
+		EditorGUIUtility.labelWidth = 75f;
+
+		//--- The XML-File Manipulation Tool at the top ---------------------------------------------------------------------------------------------------
+		GUILayout.BeginVertical ();
+		GUILayout.Label ("Scene Settings", EditorStyles.boldLabel);
+		GUILayout.BeginHorizontal ();
+		{
+			// The XML-File Manipulation Tools
+			if (GUILayout.Button ("Delete Current XMLFile", GUILayout.ExpandWidth (false))) {
+				//GEEF DIT EEN CONFIRMATION BUTTON
+				DeleteCurrentXMLFile ();
+			}
+			if (GUILayout.Button ("Save Current XMLFile", GUILayout.ExpandWidth (false))) {
+				LoadSceneXmlList ();
+				if (allXmlFileNames.Count != 0) {
+					LoadDialogData (allXmlFileNames [0]);
+				}
+			}
+			if (GUILayout.Button ("Create New XMLFile", GUILayout.ExpandWidth (false))) {
+				if (createNewFileName != "") {
+					//DOE HEIR EEN CHECK OF DAT HET BESTAND AL BESTAAT
+					CreateNewXMLFile (createNewFileName);
+				} else {
+					//GEEF HIER 'NIET GELUKT' FEEDBACK POPUP
+				}
+			}
+			createNewFileName = EditorGUILayout.TextField ("File Name: ", createNewFileName, GUILayout.Width (300));
+
+		}
+		GUILayout.EndHorizontal ();
+		GUILayout.BeginHorizontal ();
+		{
+			//--- The XML-File selection Tool ---------------------------------------------------------------------------------------------------
+			GUILayout.Label ("Select XML File", GUILayout.Width (100));
+			if (allXmlFileNames.Count == 0) {
+				GUILayout.Label ("Create an xml file above", EditorStyles.label);
+			} else {
+				int previouslySelected = selectedSceneIndex;
+				selectedSceneIndex = EditorGUILayout.Popup (selectedSceneIndex, allXmlFileNames.ToArray (), GUILayout.Width (200));
+				if (previouslySelected != selectedSceneIndex) {
+					selectedSceneName = allXmlFileNames [selectedSceneIndex];
+					LoadDialogData (allXmlFileNames [selectedSceneIndex]);
+				}
+				GUILayout.Label (selectedSceneName, EditorStyles.label, GUILayout.Width (150));
+				GUILayout.Label ("Index: " + selectedSceneIndex.ToString (), EditorStyles.label, GUILayout.Width (75));
+				GUILayout.Label ("Number of Dialogs: " + currentlyLoadedSceneDialogs.allDialogsInScene.Count, EditorStyles.label, GUILayout.Width (150));
+			}
+		}
+		GUILayout.EndHorizontal ();
+		GUILayout.EndVertical ();
+		EditorGUILayout.Space ();
+
+		if (allXmlFileNames.Count == 0)
+			return;
+
+		// Main Content Area
+		GUILayout.BeginHorizontal ();
+		{
+			//--- Left Area, containing the Scene's Dialog Tree ---------------------------------------------------------------------------------------------------
+			GUILayout.BeginVertical ();
+			{
+				//--- The buttons at the top ---
+				GUILayout.Label ("Dialog Options", EditorStyles.boldLabel, GUILayout.Width (300));
+				if (GUILayout.Button ("Create New Dialog", GUILayout.ExpandWidth (false))) {
+					CreateNewDialog ();
+				}
+				if (GUILayout.Button ("Remove Selected Dialog", GUILayout.ExpandWidth (false))) {
+					RemoveSelectedDialog ();
+				}
+				EditorGUILayout.Space ();
+
+				//--- The Dialog Button Tree ---
+				GUILayout.Label ("Dialog Tree View", EditorStyles.boldLabel, GUILayout.Width (300));
+				if (currentlyLoadedSceneDialogs != null) {
+					int dialogTreeViewLength = currentlyLoadedSceneDialogs.allDialogsInScene.Count * 25;
+					scrollPosition = GUI.BeginScrollView (new Rect (0, 100, 325, 1000), scrollPosition, new Rect (0, 95, 325, dialogTreeViewLength));
+					{
+						Color c = GUI.backgroundColor;
+						foreach (Dialog dialog in currentlyLoadedSceneDialogs.allDialogsInScene) {
+							if (dialog == selectedDialog) {
+								GUI.backgroundColor = Color.grey;
+							}
+							if (GUILayout.Button (dialog.ID + ": " + dialog.dialogDescription, GUILayout.ExpandWidth (false), GUILayout.Width (300))) {
+								SelectDialogByID (dialog.ID);
+							}
+							GUI.backgroundColor = c;
+						}
+					}
+					GUI.EndScrollView ();
+				}
+			}
+			GUILayout.EndVertical ();
+
+			if (selectedDialog == null)
+				return;
+			
+			//--- Middle Area, containing the Dialog Settings and Dialog Map ---------------------------------------------------------------------------------------------------
+			GUILayout.BeginVertical ();
+			{
+				//--- Buttons to adjust the Selected Dialog ---
+				GUILayout.Label ("DialogSettings", EditorStyles.boldLabel);
+				GUILayout.BeginHorizontal ();
+				{
+					dialogIDInput = EditorGUILayout.IntField ("ID:", dialogIDInput, GUILayout.MinWidth (0));
+					dialogDescriptionInput = EditorGUILayout.TextField ("Description:", dialogDescriptionInput, GUILayout.ExpandWidth (false), GUILayout.Width (350));
+					if (GUILayout.Button ("Update Dialog", GUILayout.ExpandWidth (false), GUILayout.Width (300))) {
+						Debug.Log ("Update die shit");
+						AdjustDialogSettings ();
+					}
+				}
+				GUILayout.EndHorizontal ();
+
+				//--- Grid to represent all the DialogLines in the selected Dialog ---
+				if (GUILayout.Button ("Create DialogLine")) {
+					// DEZE IS OUD, DOE OPNIEUW
+					//windows.Add (new Rect (10, 10, 100, 100));
+				}
+
+				if (gridBackground == null)
+					SetBackgroundTexture ();
+
+				gridScrollPosition = GUI.BeginScrollView (new Rect (325, 150, position.width - 700, position.height - 150), gridScrollPosition, new Rect (0, 0, 300, 300), true, true);
+				GUI.DrawTexture (new Rect (0, 0, position.width - 700, position.height - 150), gridBackground, ScaleMode.StretchToFill);
+
+				BeginWindows ();
+				int i = 0;
+				foreach (DialogLine line in selectedDialog.DialogLines) {
+					Rect r = new Rect (10 + 100 * i, 10, 100, 100);
+					windows.Add (r);
+					gridNodes.Add (new DialogGridNode (line, r));
+					windows[i] = GUI.Window (i, windows[i], DrawNodeWindow, "Line" + line.lineID);
+					i++;
+				}
+				EndWindows ();
+
+				/*foreach (DialogLine line in selectedDialog.DialogLines) {
+					// KANS OP INDEX ERRORS HIER, WERKT ALLEEN MET NORMAL COUNT (0)
+					if (line.followUpLine != -1) {
+						DrawNodeCurve (windows [line.lineID], windows [line.followUpLine]);
+					}
+				}*/
+
+				GUI.EndScrollView ();
+			}
+			GUILayout.EndVertical ();
+
+			if (selectedDialogLine == null)
+				return;
+
+			//--- The Right Area, containing the DialogLine Inspector ---------------------------------------------------------------------------------------------------
+			GUILayout.BeginVertical ();
+			{
+				GUILayout.Label ("Dialog Line Inspector", EditorStyles.boldLabel);
+
+				GUILayout.Label ("Line ID: " + currentLine, EditorStyles.label);
+				speakerName = EditorGUILayout.TextField ("Speaker Token: ", speakerName);
+				lineText = EditorGUILayout.TextField ("Line Text: ", lineText);
+				soundFilePath = EditorGUILayout.TextField ("Soundfile Path: ", soundFilePath);
+				spriteName = EditorGUILayout.TextField ("Sprite: ", spriteName);
+				GUILayout.Label ("Responses: " + 0, EditorStyles.label);
+			}
+			GUILayout.EndVertical ();
+
+		}
+		GUILayout.EndHorizontal ();
+	}
+
+}
+
+
+public class DialogGridNode {
+
+	public DialogGridNode (DialogLine line, Rect window) {
+		dialogLine = line;
+		windowRect = window;
+	}
+
+	public DialogLine dialogLine;
+	public Rect windowRect;
+}

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SceneDialogs>
+	<Dialog ID='0' BigSprites="true">
+		<Description> "Dialog to Stickfigure Guy in Test Scene." </Description>
+		<DialogLine lineID='0'>
+			<SpeakerData> "StickFigureGuy" </SpeakerData>
+			<DialogText> "Stay a while and listen." </DialogText>
+			<SoundFile> "" </SoundFile>
+      <FollowUpLine> 1 </FollowUpLine>
+		</DialogLine>
+		<DialogLine lineID='1'>
+			<SpeakerData> "StickFigureGuy" </SpeakerData>
+			<DialogText> "Once upon a time, I was like... the main character of this scene." </DialogText>
+			<SoundFile> "" </SoundFile>
+			<Response responseID='0'>
+				<ResponseText> "Wow, that's amazing!." </ResponseText>
+				<FollowUpLine> 3 </FollowUpLine>
+			</Response>
+			<Response responseID='1'>
+				<ResponseText> "I don't believe you." </ResponseText>
+				<FollowUpLine> 2 </FollowUpLine>
+			</Response>
+		</DialogLine>
+		<DialogLine lineID='2'>
+			<SpeakerData> "StickFigureGuy" </SpeakerData>
+			<DialogText> "But it's true I tells ye!." </DialogText>
+			<SoundFile> "" </SoundFile>
+			<Response responseID='0'>
+				<ResponseText> "Lololohueuhehuehuexexexexehhahaahhihi." </ResponseText>
+				<FollowUpLine> 4 </FollowUpLine>
+			</Response>
+			<Response responseID='1'>
+				<ResponseText> "No, shoo!." </ResponseText>
+				<FollowUpLine> -1 </FollowUpLine>
+			</Response>
+		</DialogLine>
+		<DialogLine lineID='3'>
+			<SpeakerData> "StickFigureGuy" </SpeakerData>
+			<DialogText> "I know right?" </DialogText>
+			<SoundFile> "" </SoundFile>
+			<FollowUpLine> -1 </FollowUpLine>
+		</DialogLine>
+		<DialogLine lineID='4'>
+			<SpeakerData> "StickFigureGuy" </SpeakerData>
+			<DialogText> "And they call ME crazy." </DialogText>
+			<SoundFile> "" </SoundFile>
+			<FollowUpLine> -1 </FollowUpLine>
+		</DialogLine>
+	</Dialog>
+	<Dialog ID='1'>
+		<Description> "Dialog Test 1." </Description>
+	</Dialog>
+	<Dialog ID='2'>
+		<Description> "Dialog Test @." </Description>
+		<DialogLine lineID='0'>
+			<SpeakerData> "StickFigureGuy" </SpeakerData>
+			<DialogText> "Deze Line willen we niet zien." </DialogText>
+			<SoundFile> "" </SoundFile>
+		</DialogLine>
+	</Dialog>
+	<Dialog ID='3'>
+		<Description> "Dialog Test 3." </Description>
+	</Dialog>
+	<Dialog ID='4'>
+		<Description> "Dialog Test 4." </Description>
+	</Dialog>
+	<Dialog ID='5'>
+		<Description> "Dialog Test 5." </Description>
+	</Dialog>
+</SceneDialogs>
